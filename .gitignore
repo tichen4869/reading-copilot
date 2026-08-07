@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Chrome extension build artifacts
+*.zip
+*.crx
+*.pem
+
+# WebLLM bundle (large file, ~2GB model weights NOT included — only the bundle)
+# Uncomment below if you want to exclude the bundle from the repo
+# sidebar/webllm.bundle.js
+
+# Node (if you add a build step later)
+node_modules/

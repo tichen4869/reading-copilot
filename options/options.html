@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reading Copilot — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f9fafb; color: #1f2937; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e5e7eb; padding: 36px 32px; width: 100%; max-width: 500px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    .logo { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; }
+    .logo-mark { font-size: 20px; color: #6366f1; }
+    .logo-text { font-size: 18px; font-weight: 800; color: #1e1b4b; }
+
+    /* Mode selector */
+    .section-title { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+    .mode-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px; border: 1.5px solid #e5e7eb; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; transition: border-color .15s, background .15s; }
+    .mode-btn:hover { border-color: #a5b4fc; background: #f5f3ff; }
+    .mode-btn.active { border-color: #6366f1; background: #eef2ff; }
+    .mode-icon { font-size: 22px; }
+    .mode-label { font-size: 12px; font-weight: 700; color: #1e1b4b; }
+    .mode-desc { font-size: 10px; color: #9ca3af; text-align: center; line-height: 1.4; }
+
+    /* Panels */
+    .panel { display: none; } .panel.active { display: block; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .hint { font-size: 12px; color: #9ca3af; margin-bottom: 8px; line-height: 1.5; }
+    input[type="password"], input[type="text"], input[type="url"] {
+      width: 100%; border: 1px solid #e5e7eb; border-radius: 10px;
+      padding: 10px 14px; font-size: 13px; outline: none; color: #374151;
+      background: #fafafa; font-family: inherit; transition: border-color .15s;
+    }
+    input:focus { border-color: #a5b4fc; }
+
+    /* WebLLM model select */
+    select { width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; font-size: 13px; outline: none; color: #374151; background: #fafafa; font-family: inherit; cursor: pointer; }
+
+    hr { border: none; border-top: 1px solid #f3f4f6; margin: 24px 0; }
+    .actions { display: flex; gap: 10px; margin-top: 4px; }
+    button { font-family: inherit; cursor: pointer; }
+    .btn-primary { background: #1e1b4b; color: #fff; border: none; border-radius: 10px; padding: 11px 22px; font-size: 13px; font-weight: 700; transition: background .15s; }
+    .btn-primary:hover { background: #312e81; }
+    .btn-danger { background: #fff; color: #ef4444; border: 1px solid #fca5a5; border-radius: 10px; padding: 11px 18px; font-size: 13px; font-weight: 600; transition: background .15s; }
+    .btn-danger:hover { background: #fef2f2; }
+    .status { margin-top: 12px; font-size: 13px; min-height: 20px; }
+    .status.ok { color: #16a34a; } .status.err { color: #ef4444; }
+
+    .stats-title { font-size: 12px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .stat-row { display: flex; justify-content: space-between; font-size: 13px; color: #374151; padding: 6px 0; border-bottom: 1px solid #f9fafb; }
+    .stat-val { font-weight: 700; color: #1e1b4b; }
+    a { color: #6366f1; text-decoration: none; } a:hover { text-decoration: underline; }
+    .webllm-note { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 14px; font-size: 12px; color: #166534; line-height: 1.6; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <span class="logo-mark">✦</span>
+    <span class="logo-text">Reading Copilot</span>
+  </div>
+
+  <div class="section-title">AI Mode</div>
+  <div class="mode-grid">
+    <button class="mode-btn" data-mode="webllm">
+      <span class="mode-icon">🧠</span>
+      <span class="mode-label">Local AI</span>
+      <span class="mode-desc">Runs in browser. No key, no cost.</span>
+    </button>
+    <button class="mode-btn" data-mode="ollama">
+      <span class="mode-icon">🦙</span>
+      <span class="mode-label">Ollama</span>
+      <span class="mode-desc">Local model via Ollama app.</span>
+    </button>
+    <button class="mode-btn" data-mode="apikey">
+      <span class="mode-icon">☁️</span>
+      <span class="mode-label">API Key</span>
+      <span class="mode-desc">Anthropic or OpenAI cloud model.</span>
+    </button>
+  </div>
+
+  <!-- WebLLM panel -->
+  <div class="panel" id="panel-webllm">
+    <div class="webllm-note">
+      ✅ <strong>Zero cost, zero setup.</strong> The model (~2 GB) downloads once to your browser cache and runs entirely on your device. Requires Chrome 113+ with WebGPU support.
+    </div>
+    <div class="field">
+      <label for="webllm-model">Model</label>
+      <select id="webllm-model">
+        <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi-3.5 Mini — 2.2 GB (recommended)</option>
+        <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B — 2.0 GB</option>
+        <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B — 1.5 GB (fastest)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Ollama panel -->
+  <div class="panel" id="panel-ollama">
+    <div class="field">
+      <label for="ollama-url">Ollama URL</label>
+      <div class="hint">Default: <code>http://localhost:11434</code>. Install Ollama at <a href="https://ollama.com" target="_blank">ollama.com</a>, then run <code>ollama pull llama3.2</code>.</div>
+      <input type="url" id="ollama-url" placeholder="http://localhost:11434" />
+    </div>
+    <div class="field">
+      <label for="ollama-model">Model name</label>
+      <input type="text" id="ollama-model" placeholder="llama3.2" />
+    </div>
+  </div>
+
+  <!-- API Key panel -->
+  <div class="panel" id="panel-apikey">
+    <div class="field">
+      <label for="api-key">Anthropic API Key</label>
+      <div class="hint">Stored locally only. <a href="https://console.anthropic.com/settings/keys" target="_blank">Get a key →</a></div>
+      <input type="password" id="api-key" placeholder="sk-ant-…" autocomplete="off" />
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" id="btn-save">Save</button>
+    <button class="btn-danger" id="btn-clear">Clear all data</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <hr />
+  <div class="stats-title">Reading Stats</div>
+  <div class="stat-row"><span>Articles completed</span><span class="stat-val" id="stat-articles">—</span></div>
+  <div class="stat-row"><span>Knowledge graph concepts</span><span class="stat-val" id="stat-concepts">—</span></div>
+  <div class="stat-row"><span>Total sessions</span><span class="stat-val" id="stat-sessions">—</span></div>
+</div>
+<script src="options.js"></script>
+</body>
+</html>
