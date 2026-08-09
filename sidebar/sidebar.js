@@ -167,6 +167,7 @@ async function init() {
           await loadAhaMoments();
           _initComplete = true;
           render("chat");
+          saveReadingHistory(article).catch(() => {});
         } else {
           _initComplete = true;
           await doGenerateQuestions();
@@ -198,6 +199,7 @@ async function init() {
         await loadAhaMoments();
         _initComplete = true;
         render("chat");
+        saveReadingHistory(article).catch(() => {});
         loadArticleConnections();
       } else {
         _initComplete = true;
@@ -209,6 +211,76 @@ async function init() {
     render("purpose");
   }
 
+}
+
+// ── Reading History ───────────────────────────────────────────────────────────
+const HISTORY_KEY    = "readingHistory";
+const HISTORY_MAX    = 200;
+
+async function saveReadingHistory(article) {
+  if (!article?.url || !article?.title) return;
+  const { readingHistory: existing = [] } = await chrome.storage.local.get(HISTORY_KEY);
+  // Remove any previous entry for same URL, then prepend updated entry
+  const filtered = existing.filter(e => e.url !== article.url);
+  const entry = { title: article.title, url: article.url, ts: Date.now() };
+  const updated = [entry, ...filtered].slice(0, HISTORY_MAX);
+  await chrome.storage.local.set({ [HISTORY_KEY]: updated });
+}
+
+function fmtHistoryDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return "Today " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7)  return `${diffDays} days ago`;
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function renderHistory() {
+  // Loaded asynchronously — placeholder first, then fill
+  const wrap = document.createElement("div");
+  wrap.className = "screen";
+  wrap.innerHTML = `
+    <div class="history-screen screen">
+      <div class="sidebar-header">
+        <div class="header-left"><span class="logo-mark">✦</span><span class="logo-text">Reading History</span></div>
+        <button class="icon-btn" id="btn-history-back" style="font-size:11px;padding:3px 7px;border-radius:6px">← Back</button>
+      </div>
+      <div class="history-list" id="history-list">
+        <div style="padding:32px 16px;text-align:center;color:#9ca3af;font-size:13px">Loading…</div>
+      </div>
+    </div>`;
+
+  chrome.storage.local.get(HISTORY_KEY).then(({ readingHistory = [] }) => {
+    const list = wrap.querySelector("#history-list");
+    if (!list) return;
+    if (readingHistory.length === 0) {
+      list.innerHTML = `<div style="padding:48px 16px;text-align:center;color:#9ca3af;font-size:13px">No articles yet.<br>Start reading to build your history.</div>`;
+      return;
+    }
+    list.innerHTML = readingHistory.map((entry, i) => `
+      <div class="history-item" data-url="${esc(entry.url)}" data-i="${i}">
+        <div class="history-item-title">${esc(entry.title)}</div>
+        <div class="history-item-meta">${esc(fmtHistoryDate(entry.ts))}</div>
+      </div>`).join("");
+
+    list.querySelectorAll(".history-item").forEach(el => {
+      el.addEventListener("click", () => {
+        const url = el.dataset.url;
+        if (url) chrome.tabs.create({ url });
+      });
+    });
+  });
+
+  // Back button
+  requestAnimationFrame(() => {
+    wrap.querySelector("#btn-history-back")?.addEventListener("click", () => {
+      render(state.historyReturnView || "purpose");
+    });
+  });
+
+  return wrap;
 }
 
 function buildQuestionsMessage(purpose, questions) {
@@ -566,6 +638,9 @@ async function doGenerateQuestions({ fallback = null } = {}) {
     state.conversation = [{ role: "ai", text: buildQuestionsMessage(state.purpose, questions), concepts: [] }];
     render("chat");
     scrollToBottom();
+
+    // Save to reading history (non-blocking)
+    saveReadingHistory(state.article).catch(() => {});
 
     // Trigger past-connections analysis asynchronously (don't await — non-blocking)
     loadArticleConnections();
@@ -958,6 +1033,7 @@ function render(view) {
     "chat":                 renderChat,
     "summary-loading":      renderSummaryLoading,
     "summary":              renderSummary,
+    "history":              renderHistory,
   };
 
   const fn = views[view];
@@ -1041,6 +1117,9 @@ function renderPurpose() {
           <button class="purpose-btn" data-purpose="learning"><span class="purpose-icon">📖</span><span class="purpose-label">Learn Concepts</span><span class="purpose-desc">Understand core ideas & principles</span></button>
           <button class="purpose-btn" data-purpose="research"><span class="purpose-icon">🔬</span><span class="purpose-label">Deep Research</span><span class="purpose-desc">Analyze arguments & implications</span></button>
           <button class="purpose-btn" data-purpose="general"><span class="purpose-icon">👀</span><span class="purpose-label">General Read</span><span class="purpose-desc">Grasp the key takeaways</span></button>
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="history-link-btn" id="btn-purpose-history">📚 Reading history</button>
         </div>
       </div>
     </div>`);
@@ -1261,6 +1340,7 @@ function renderChat() {
         <div class="header-actions">
           <button class="icon-btn" id="btn-change-goal" title="Switch purpose" style="font-size:11px;padding:3px 7px;border-radius:6px">sessions ↺</button>
           ${state.purpose === "interview" ? `<button class="icon-btn" id="btn-edit-links" title="Edit job links" style="font-size:11px;padding:3px 7px;border-radius:6px">✏️ links</button>` : ""}
+          <button class="icon-btn" id="btn-to-history" title="Reading history" style="font-size:11px;padding:3px 7px;border-radius:6px">📚</button>
           <button class="icon-btn" id="btn-to-summary" title="Summary" style="font-size:11px;padding:3px 7px;border-radius:6px">summary</button>
         </div>
       </div>
@@ -1482,6 +1562,11 @@ function attachHandlers(view) {
     });
     // Load purpose badges for existing conversations
     loadPurposeBadges();
+
+    $("#btn-purpose-history")?.addEventListener("click", () => {
+      state.historyReturnView = "purpose";
+      render("history");
+    });
   }
   if (view === "iv-job-prompt") {
     // Back → purpose screen
@@ -1754,6 +1839,11 @@ function attachHandlers(view) {
 
     // Edit job links (interview mode only)
     $("#btn-edit-links")?.addEventListener("click", () => render("iv-edit-links"));
+
+    $("#btn-to-history")?.addEventListener("click", () => {
+      state.historyReturnView = "chat";
+      render("history");
+    });
 
     $("#btn-change-goal")?.addEventListener("click", async () => {
       // Interview mode: show session picker instead of full purpose screen
