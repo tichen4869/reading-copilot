@@ -167,7 +167,6 @@ async function init() {
           await loadAhaMoments();
           _initComplete = true;
           render("chat");
-          saveReadingHistory(article).catch(() => {});
         } else {
           _initComplete = true;
           await doGenerateQuestions();
@@ -199,7 +198,6 @@ async function init() {
         await loadAhaMoments();
         _initComplete = true;
         render("chat");
-        saveReadingHistory(article).catch(() => {});
         loadArticleConnections();
       } else {
         _initComplete = true;
@@ -468,6 +466,10 @@ async function sendMessage(text) {
   const selPreview = $("#sel-preview");
   if (selPreview) selPreview.style.display = "none";
 
+  // Save to reading history on first user message (marks this as an active conversation)
+  const isFirstUserMsg = !state.conversation.some(m => m.role === "user");
+  if (isFirstUserMsg) saveReadingHistory(state.article).catch(() => {});
+
   state.conversation.push({ role: "user", text, selection });
 
   // When user selected a passage, include it explicitly in the message sent to the AI
@@ -638,9 +640,6 @@ async function doGenerateQuestions({ fallback = null } = {}) {
     state.conversation = [{ role: "ai", text: buildQuestionsMessage(state.purpose, questions), concepts: [] }];
     render("chat");
     scrollToBottom();
-
-    // Save to reading history (non-blocking)
-    saveReadingHistory(state.article).catch(() => {});
 
     // Trigger past-connections analysis asynchronously (don't await — non-blocking)
     loadArticleConnections();
@@ -882,6 +881,13 @@ function updateConnectionsSection() {
     if (body) body.style.display = isOpen ? "none" : "block";
     if (chevron) chevron.textContent = isOpen ? "▸" : "▾";
   });
+  // Re-attach click-to-open handlers
+  document.querySelectorAll(".conn-item--clickable").forEach(el => {
+    el.addEventListener("click", () => {
+      const url = el.dataset.url;
+      if (url) chrome.tabs.create({ url });
+    });
+  });
 }
 
 function buildConnectionsHtml() {
@@ -903,9 +909,9 @@ function buildConnectionsHtml() {
   };
 
   const items = conns.map(c => `
-    <div class="conn-item">
+    <div class="conn-item${c.articleUrl ? ' conn-item--clickable' : ''}" ${c.articleUrl ? `data-url="${esc(c.articleUrl)}"` : ''}>
       <div class="conn-type-badge">${esc(typeLabel[c.connectionType] || "Related")}</div>
-      <div class="conn-title">${esc(c.articleTitle || "")}</div>
+      <div class="conn-title">${esc(c.articleTitle || "")}${c.articleUrl ? ' <span class="conn-open-hint">↗</span>' : ''}</div>
       <div class="conn-insight">${esc(c.connectionInsight || "")}</div>
     </div>`).join("");
 
@@ -1781,6 +1787,14 @@ function attachHandlers(view) {
       const isOpen = body.style.display !== "none";
       body.style.display = isOpen ? "none" : "block";
       if (chevron) chevron.textContent = isOpen ? "▸" : "▾";
+    });
+
+    // Connections: click item to open article in new tab
+    document.querySelectorAll(".conn-item--clickable").forEach(el => {
+      el.addEventListener("click", () => {
+        const url = el.dataset.url;
+        if (url) chrome.tabs.create({ url });
+      });
     });
     // Click question row OR the answer button to toggle the inline answer
     function togglePinnedAnswer(i) {

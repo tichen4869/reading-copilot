@@ -25,6 +25,15 @@
   border-radius: 8px; padding: 9px 11px;
   display: flex; flex-direction: column; gap: 3px;
 }
+.conn-item--clickable {
+  cursor: pointer; transition: background 0.12s, border-color 0.12s;
+}
+.conn-item--clickable:hover {
+  background: #fffbeb; border-color: #f59e0b;
+}
+.conn-open-hint {
+  font-size: 11px; color: #b45309; font-weight: 400;
+}
 .conn-type-badge {
   font-size: 10px; font-weight: 700; color: #b45309;
   text-transform: uppercase; letter-spacing: .06em;
