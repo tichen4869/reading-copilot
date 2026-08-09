@@ -854,3 +854,25 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     });
   }
 });
+
+// ── URL change within the same tab (full navigation or SPA) ──────────────────
+// Catches cases where the user navigates within the same tab.
+// We clear the old article registration immediately so the sidebar shows
+// "no article" until the content script registers the new page.
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== "complete" || !changeInfo.url) return;
+
+  const { allArticles = {}, currentArticle } = await chrome.storage.local.get(["allArticles", "currentArticle"]);
+
+  // Only act if this is the tab the sidebar was showing
+  if (currentArticle?.tabId !== tabId) return;
+  // Only act if the URL actually changed
+  if (currentArticle?.url === changeInfo.url) return;
+
+  // Remove stale article entry for this tab so init() sees a fresh state
+  delete allArticles[tabId];
+  await chrome.storage.local.set({
+    allArticles,
+    tabSwitchedSignal: { tabId, url: changeInfo.url, ts: Date.now() },
+  });
+});
