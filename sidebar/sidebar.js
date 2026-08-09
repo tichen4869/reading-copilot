@@ -217,6 +217,8 @@ const HISTORY_MAX    = 200;
 
 async function saveReadingHistory(article) {
   if (!article?.url || !article?.title) return;
+  // Double-check: only save if conversation actually has at least one user message
+  if (!state.conversation.some(m => m.role === "user")) return;
   const { readingHistory: existing = [] } = await chrome.storage.local.get(HISTORY_KEY);
   // Remove any previous entry for same URL, then prepend updated entry
   const filtered = existing.filter(e => e.url !== article.url);
@@ -466,11 +468,11 @@ async function sendMessage(text) {
   const selPreview = $("#sel-preview");
   if (selPreview) selPreview.style.display = "none";
 
-  // Save to reading history on first user message (marks this as an active conversation)
-  const isFirstUserMsg = !state.conversation.some(m => m.role === "user");
-  if (isFirstUserMsg) saveReadingHistory(state.article).catch(() => {});
-
   state.conversation.push({ role: "user", text, selection });
+
+  // Save to reading history on first user message (marks this as an active conversation)
+  const userMsgCount = state.conversation.filter(m => m.role === "user").length;
+  if (userMsgCount === 1) saveReadingHistory(state.article).catch(() => {});
 
   // When user selected a passage, include it explicitly in the message sent to the AI
   // so the answer is contextually grounded in that specific excerpt.
