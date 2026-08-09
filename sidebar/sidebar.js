@@ -480,7 +480,7 @@ const PURPOSE_PROMPTS = {
   general:   'Generate exactly 3 questions that test whether someone truly understood the key points. Return ONLY a JSON array of 3 strings.',
 };
 
-async function doGenerateQuestions() {
+async function doGenerateQuestions({ fallback = null } = {}) {
   // For interview mode: ensure there is an active session
   if (state.purpose === "interview" && !state.ivSessionId) {
     // startNewIVSession should have been called first; if not, create one now
@@ -571,6 +571,32 @@ async function doGenerateQuestions() {
     loadArticleConnections();
 
   } catch (e) {
+    // If we have a fallback (called from edit-links), restore previous questions and show a toast
+    if (fallback?.questions?.length) {
+      state.questions      = fallback.questions;
+      state.questionAnswers = fallback.answers || [];
+      state.jobUrls        = fallback.jobUrls  || [];
+      // Undo the optimistic history entry we just archived
+      if (state.questionHistory?.length) {
+        state.questionHistory = state.questionHistory.slice(0, -1);
+        const url = state.article?.url;
+        if (url && state.ivSessionId) {
+          chrome.storage.local.set({ [getQHistKey(url, state.ivSessionId)]: state.questionHistory }).catch(() => {});
+        }
+      }
+      // Restore session meta job URLs
+      if (state.ivMeta && state.ivSessionId && state.article?.url) {
+        const session = state.ivMeta.sessions.find(s => s.id === state.ivSessionId);
+        if (session) {
+          session.jobUrls = fallback.jobUrls || [];
+          saveIVMeta(state.article.url, state.ivMeta).catch(() => {});
+        }
+      }
+      render("chat");
+      showToast("⚠️ Couldn't read that job link — reverted to previous questions.");
+      return;
+    }
+
     // Clear saved purpose + questions so reopening starts fresh instead of re-failing
     if (state.article?.url) {
       const keysToRemove = [`purpose:${state.article.url}`];
@@ -1197,14 +1223,22 @@ function renderChat() {
           <div class="past-qs-section">
             <div class="past-qs-toggle" id="past-qs-toggle">
               <span>Past question sets (${state.questionHistory.length})</span>
-              <span class="past-qs-chevron">▾</span>
+              <span class="past-qs-chevron">▸</span>
             </div>
             <div class="past-qs-body" id="past-qs-body" style="display:none">
-              ${[...state.questionHistory].reverse().map((set, si) => `
+              ${[...state.questionHistory].reverse().map((set, si) => {
+                const label = `${fmtSessionDate(set.ts)}${set.jobUrls?.length ? ` · ${set.jobUrls.map(u => { try { return new URL(u).hostname.replace(/^www\./,''); } catch { return u; } }).join(', ')}` : ''}`;
+                return `
                 <div class="past-qs-set">
-                  <div class="past-qs-set-label">${fmtSessionDate(set.ts)}${set.jobUrls?.length ? ` · ${set.jobUrls.map(u => { try { return new URL(u).hostname.replace(/^www\./,''); } catch { return u; } }).join(', ')}` : ''}</div>
-                  ${set.questions.map((q, qi) => `<div class="past-qs-item"><span class="pinned-num">${qi+1}</span>${esc(q)}</div>`).join("")}
-                </div>`).join("")}
+                  <div class="past-qs-set-toggle" data-si="${si}">
+                    <span>${esc(label)}</span>
+                    <span class="past-qs-set-chevron">▸</span>
+                  </div>
+                  <div class="past-qs-set-questions" id="past-qs-set-${si}" style="display:none">
+                    ${set.questions.map((q, qi) => `<div class="past-qs-item"><span class="pinned-num">${qi+1}</span>${esc(q)}</div>`).join("")}
+                  </div>
+                </div>`;
+              }).join("")}
             </div>
           </div>` : ""}
       </div>
@@ -1574,9 +1608,14 @@ function attachHandlers(view) {
       const url = state.article?.url;
       if (!url || !state.ivSessionId) return;
 
+      // Snapshot current state for fallback (in case new links fail to generate questions)
+      const prevQuestions = [...(state.questions || [])];
+      const prevAnswers   = [...(state.questionAnswers || [])];
+      const prevJobUrls   = [...(state.jobUrls || [])];
+
       // Archive current questions to history before regenerating
       if (state.questions?.length) {
-        const histEntry = { ts: Date.now(), questions: [...state.questions], jobUrls: [...(state.jobUrls || [])] };
+        const histEntry = { ts: Date.now(), questions: prevQuestions, jobUrls: prevJobUrls };
         state.questionHistory = [...(state.questionHistory || []), histEntry];
         const qHistKey = getQHistKey(url, state.ivSessionId);
         await chrome.storage.local.set({ [qHistKey]: state.questionHistory });
@@ -1599,7 +1638,9 @@ function attachHandlers(view) {
       // Clear current questions (will be regenerated)
       state.questions = [];
       state.questionAnswers = [];
-      await doGenerateQuestions();
+      await doGenerateQuestions({
+        fallback: prevQuestions.length ? { questions: prevQuestions, answers: prevAnswers, jobUrls: prevJobUrls } : null
+      });
     };
 
     $("#btn-iv-edit-save")?.addEventListener("click", async () => {
@@ -1688,14 +1729,27 @@ function attachHandlers(view) {
       });
     });
 
-    // Past question sets toggle
+    // Past question sets — section toggle
     $("#past-qs-toggle")?.addEventListener("click", () => {
       const body    = $("#past-qs-body");
       const chevron = document.querySelector(".past-qs-chevron");
       if (!body) return;
       const isOpen = body.style.display !== "none";
       body.style.display = isOpen ? "none" : "block";
-      if (chevron) chevron.textContent = isOpen ? "▾" : "▴";
+      if (chevron) chevron.textContent = isOpen ? "▸" : "▾";
+    });
+
+    // Past question sets — per-session collapse toggle
+    document.querySelectorAll(".past-qs-set-toggle").forEach(toggle => {
+      toggle.addEventListener("click", () => {
+        const si       = toggle.dataset.si;
+        const content  = document.getElementById(`past-qs-set-${si}`);
+        const chevron  = toggle.querySelector(".past-qs-set-chevron");
+        if (!content) return;
+        const isOpen = content.style.display !== "none";
+        content.style.display = isOpen ? "none" : "block";
+        if (chevron) chevron.textContent = isOpen ? "▸" : "▾";
+      });
     });
 
     // Edit job links (interview mode only)
@@ -1953,6 +2007,27 @@ function updateStreamBubble() {
 function scrollToBottom() {
   const c = $("#chat-messages");
   if (c) c.scrollTop = c.scrollHeight;
+}
+
+function showToast(message, durationMs = 3500) {
+  const existing = document.getElementById("__rc_toast__");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.id = "__rc_toast__";
+  toast.textContent = message;
+  Object.assign(toast.style, {
+    position: "fixed", bottom: "72px", left: "50%", transform: "translateX(-50%)",
+    background: "#1e1b4b", color: "#fff", padding: "8px 14px", borderRadius: "8px",
+    fontSize: "12px", fontWeight: "600", zIndex: "9999", maxWidth: "90%",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.25)", opacity: "0",
+    transition: "opacity 0.2s ease",
+  });
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = "1"; });
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => toast.remove(), 250);
+  }, durationMs);
 }
 
 // After AI finishes, scroll to the TOP of the latest AI message.

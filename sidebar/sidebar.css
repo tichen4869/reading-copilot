@@ -836,15 +836,25 @@ input, textarea { font-family: inherit; }
 }
 .past-qs-toggle:hover { color: #6b7280; }
 .past-qs-chevron { font-size: 10px; }
-.past-qs-body { margin-top: 4px; }
+.past-qs-body {
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
 .past-qs-set {
-  margin-bottom: 8px; padding-bottom: 8px;
+  margin-bottom: 4px; padding-bottom: 4px;
   border-bottom: 1px solid #f3f4f6;
 }
 .past-qs-set:last-child { border-bottom: none; margin-bottom: 0; }
-.past-qs-set-label {
-  font-size: 10px; color: #9ca3af; margin-bottom: 4px; font-style: italic;
+.past-qs-set-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px; color: #9ca3af; cursor: pointer;
+  padding: 3px 0; user-select: none; font-style: italic;
 }
+.past-qs-set-toggle:hover { color: #6b7280; }
+.past-qs-set-chevron { font-size: 10px; flex-shrink: 0; }
+.past-qs-set-questions { padding: 2px 0 4px 0; }
 .past-qs-item {
   display: flex; gap: 6px; align-items: flex-start;
   font-size: 11px; color: #6b7280; line-height: 1.5; padding: 2px 0;
